@@ -10,8 +10,14 @@ fn main() {
     let stream = TcpStream::connect("localhost:5568").unwrap();
     let mut stream = connector.connect("localhost", stream).unwrap();
 
-    stream.write_all(b"123456789012345678901234567890").unwrap();
-    let mut res = vec![];
-    stream.read_to_end(&mut res).unwrap();
-    println!("{}", String::from_utf8_lossy(&res));
+    // Write req1
+    stream.write("req1".as_bytes()).unwrap();
+    stream.flush().unwrap();
+    // Receive answer
+    let mut buffer = [0; 20];
+    stream.read(&mut buffer).unwrap();
+    println!("{:?}", String::from_utf8_lossy(&buffer));
+    // write close
+    stream.write("close".as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
