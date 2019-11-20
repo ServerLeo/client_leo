@@ -1,16 +1,26 @@
-extern crate native_tls;
-
-use native_tls::TlsConnector;
+use async_std::{net::TcpStream, task};
+use async_tls::TlsConnector;
 use std::io;
-use std::io::prelude::*;
-use std::net::TcpStream;
+
+use async_std::prelude::*;
 
 fn main() {
-    let tls_connector = TlsConnector::new().unwrap();
+    task::block_on(async { open_connection().await })
+}
 
-    let stream = TcpStream::connect("localhost:5568").unwrap();
-    let mut stream = tls_connector.connect("localhost", stream).unwrap();
+async fn open_connection() {
+    let tcp_stream = TcpStream::connect("localhost:5568")
+        .await
+        .expect("TCP handshake failed.");
 
+    let tls_connector = TlsConnector::default();
+    let mut tls_stream = tls_connector
+        .connect("localhost", tcp_stream)
+        .expect("TLS handshake failed.")
+        .await
+        .expect("Awaiting TLS failed");
+
+    // IO initialization.
     let stdin = io::stdin();
     let mut input_buffer = String::new();
 
@@ -18,14 +28,22 @@ fn main() {
     loop {
         println!("Awaiting input:");
         input_buffer.clear();
-        stdin.read_line(&mut input_buffer).unwrap();
+        stdin
+            .read_line(&mut input_buffer)
+            .expect("Reading input failed.");
 
-        stream.write(input_buffer.trim().as_bytes()).unwrap();
-        stream.flush().unwrap();
+        tls_stream
+            .write(input_buffer.trim().as_bytes())
+            .await
+            .expect("Writing into TLS stream failed.");
+        tls_stream.flush().await.expect("Flushing stream failed.");
 
         // Read answer. TODO: read answer as flatbuffer.
         let mut buffer = [0; 20];
-        stream.read(&mut buffer).unwrap();
+        tls_stream
+            .read(&mut buffer)
+            .await
+            .expect("Reading from TLS stream failed.");
         let answer = String::from_utf8_lossy(&buffer[..]);
         let answer = answer.trim_end_matches(char::from(0));
         println!("Answer is {:?}", answer);
