@@ -1,8 +1,8 @@
-use async_std::{net::TcpStream, task};
+use async_std::{net::TcpStream, prelude::*, task};
 use async_tls::TlsConnector;
-use std::io;
+use std::{io, io::Cursor, path::Path, sync::Arc};
 
-use async_std::prelude::*;
+use rustls::ClientConfig;
 
 fn main() {
     task::block_on(async { open_connection().await })
@@ -13,7 +13,20 @@ async fn open_connection() {
         .await
         .expect("TCP handshake failed.");
 
-    let tls_connector = TlsConnector::default();
+    let mut config = ClientConfig::new();
+
+    let cafile = Path::new("end.chain");
+    let file = async_std::fs::read(cafile)
+        .await
+        .expect("Failed to read file.");
+    let mut pem = Cursor::new(file);
+    config
+        .root_store
+        .add_pem_file(&mut pem)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid cert"))
+        .expect("Unable to create configuration object.");
+
+    let tls_connector = TlsConnector::from(Arc::new(config));
     let mut tls_stream = tls_connector
         .connect("localhost", tcp_stream)
         .expect("TLS handshake failed.")
